@@ -11,21 +11,30 @@ public class PlayerController : MonoBehaviour
 	public float throwStrength;
 	public GameObject discharge;
 	public bool grounded;
+
+	Vector3 ogPosition;
+	Quaternion ogRotation;
+
 	InputAction move;
 	InputAction jump;
 	InputAction look;
 	InputAction click;
 	float camVertRot = 0f;
 	Queue<GameObject> discharges;
+	float detonateCooldown = 0;
 
     void Start()
     {
 		Cursor.lockState = CursorLockMode.Locked;
 		Cursor.visible = false;
+
         move = InputSystem.actions.FindAction("Move");
         jump = InputSystem.actions.FindAction("Jump");
 		look = InputSystem.actions.FindAction("Look");
+		
 		discharges = new Queue<GameObject>();
+		ogPosition = transform.position;
+		ogRotation = transform.rotation;
     }
 
     void Update()
@@ -33,16 +42,21 @@ public class PlayerController : MonoBehaviour
 		Vector2 movement = move.ReadValue<Vector2>().normalized;
 		Vector2 lookment = look.ReadValue<Vector2>();
 
-		if (grounded) MoveGrounded(movement);
-		else MoveAirborne(movement);
+		if (grounded)
+			MoveGrounded(movement);
+		else
+			MoveAirborne(movement);
 
 		MoveCamera(lookment);
 		
 		if (InputSystem.actions.FindAction("Attack").WasPressedThisFrame())
 			Throw();
 
-		if (InputSystem.actions.FindAction("Interact").WasPressedThisFrame())
-			discharges.Dequeue().GetComponent<Discharge>().Explode();
+		if (InputSystem.actions.FindAction("Interact").IsInProgress())
+			Detonate();
+
+		if (InputSystem.actions.FindAction("Reset").WasPressedThisFrame())
+			Reset();
     }
 
 	void MoveGrounded(Vector2 movement) {
@@ -85,29 +99,47 @@ public class PlayerController : MonoBehaviour
 
 	void MoveCamera(Vector2 lookment) {
 		gameObject.transform.Rotate(0, lookment.x * mouseSens, 0);
-		camVertRot -= lookment.y * mouseSens;
-		camVertRot = Mathf.Clamp(camVertRot, -89f, 89f);
+		camVertRot = Mathf.Clamp(
+			camVertRot - (lookment.y * mouseSens),
+			-89f,
+			89f
+		);
 		transform.GetChild(0).localEulerAngles =
 			Vector3.right * camVertRot;
 	}
 
 	void Throw() {
-			GameObject thrown = Instantiate(
-				discharge,
-				GetComponentInChildren<Transform>().position,
-				Quaternion.identity
-			);
-			Physics.IgnoreCollision(
-				GetComponent<Collider>(),
-				thrown.GetComponent<Collider>()
-			);
-			thrown.GetComponent<Rigidbody>().linearVelocity =
-				GetComponent<Rigidbody>().linearVelocity;
-			thrown.GetComponent<Rigidbody>().AddForce(
-				transform.GetChild(0).forward * throwStrength,
-				ForceMode.VelocityChange
-			);
-			discharges.Enqueue(thrown);
+		GameObject thrown = Instantiate(
+			discharge,
+			GetComponentInChildren<Transform>().position,
+			Quaternion.identity
+		);
+		Physics.IgnoreCollision(
+			GetComponent<Collider>(),
+			thrown.GetComponent<Collider>()
+		);
+		thrown.GetComponent<Rigidbody>().linearVelocity =
+			GetComponent<Rigidbody>().linearVelocity;
+		thrown.GetComponent<Rigidbody>().AddForce(
+			transform.GetChild(0).forward * throwStrength,
+			ForceMode.VelocityChange
+		);
+		discharges.Enqueue(thrown);
+		detonateCooldown = Time.fixedTime;
+	}
+
+	void Detonate() {
+		if (Time.fixedTime < detonateCooldown + 0.5F ||
+			discharges.Count == 0
+		) return;
+		detonateCooldown = Time.fixedTime;
+		discharges.Dequeue().GetComponent<Discharge>().Explode();
+	}
+
+	void Reset() {
+		transform.position = ogPosition;
+		transform.rotation = ogRotation;
+		GetComponent<Rigidbody>().linearVelocity = Vector3.zero;
 	}
 
 	private bool checkgrounded(Collision col) {

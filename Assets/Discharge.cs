@@ -13,6 +13,7 @@ public class Discharge : MonoBehaviour
 			boomRadius
 		)) {
 			if (hit.attachedRigidbody == null) continue;
+			hit.attachedRigidbody.linearVelocity = Vector3.zero;
 			hit.attachedRigidbody.AddExplosionForce(
 				boomForce,
 				transform.position,
@@ -22,5 +23,15 @@ public class Discharge : MonoBehaviour
 			);
 		}
 		Destroy(gameObject);
+	}
+
+	void OnCollisionEnter(Collision col) {
+		foreach (Collider hit in Physics.OverlapSphere(
+			transform.position,
+			1F
+		)) {
+			if (hit.tag == "Player")
+				GetComponent<Rigidbody>().linearVelocity = Vector3.zero;
+		}
 	}
 }
